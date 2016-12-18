@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import edu.rpi.util.DataUtil;
+import edu.rpi.util.MathLib;
+
 /**
  *
  * @author Chunheng Jiang
@@ -190,32 +193,11 @@ public class CollegeMatch {
 		return w;
 	}
 
-	/**
-	 * Simulation
-	 */
-	public void simulate() {
-		int ns = 100, ds = 25;
-		int nc = 200, dc = 23;
-		int maxK = 10;
-
-		double[][] students = DataUtil.generateFeatureMatrix(ns, ds, -1, 1);
-		double[][] colleges = DataUtil.generateFeatureMatrix(nc, dc, 0, 1);
-
-		List<int[]> preferences = DataUtil.generatePreferences(students, colleges, maxK);
-		double[][] w = learn(colleges, students, preferences);
-
-		DataUtil.write(students, "./students.txt");
-		DataUtil.write(colleges, "./colleges.txt");
-		DataUtil.writePreferences(preferences, "./preferences.txt");
-		DataUtil.writeModel(w, "./model.txt");
-	}
-
 	public static void main(String[] args) {
 		if (args == null) {
 			System.err.println("USAGE:\n -train <colleges> <students> <preferences> <model>");
 			System.err.println(" -predict <model> <colleges> <student> <k> <preference>");
 			System.err.println(" -enhance <model> <colleges> <students> <preferences> <enhence>");
-			System.err.println(" -simulate");
 			return;
 		}
 
@@ -271,16 +253,10 @@ public class CollegeMatch {
 			return;
 		}
 
-		if (prefix.startsWith("-simulate")) {
-			cm.simulate();
-			return;
-		}
-
 		System.err.println("ERROR: Undefined operation \"" + prefix + "\"");
 		System.err.println("USAGE:\n -train <colleges> <students> <preferences> <model>");
 		System.err.println(" -predict <model> <colleges> <student> <k> <preference>");
 		System.err.println(" -enhance <model> <colleges> <students> <preferences> <enhence>");
-		System.err.println(" -simulate");
 		return;
 	}
 }

@@ -16,6 +16,7 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 
+import edu.rpi.util.DataUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -30,11 +31,11 @@ public class MessengeCenter {
 	public final int portRedis = 6379;
 
 	public MessengeCenter() {
+		cm = new CollegeMatch();
 	}
 
-	void train(String request, Jedis redis) {
-		String[] args = request.split(" ");
-		if (args.length == 5) {
+	void train(String[] args, Jedis redis) {
+		if (args.length >= 5) {
 			double[][] colleges = DataUtil.getRedisData(redis, args[1], true);
 			double[][] students = DataUtil.getRedisData(redis, args[2], true);
 			List<int[]> preferences = new ArrayList<>();
@@ -45,9 +46,8 @@ public class MessengeCenter {
 			logger.info("USAGE: -train <colleges> <students> <preferences> <model>");
 	}
 
-	void predict(String request, Jedis redis) {
-		String[] args = request.split(" ");
-		if (args.length == 6) {
+	void predict(String[] args, Jedis redis) {
+		if (args.length >= 6) {
 			double[][] w = DataUtil.getRedisData(redis, args[1], false);
 			double[][] colleges = DataUtil.getRedisData(redis, args[2], false);
 			double[] student = new double[w.length];
@@ -63,9 +63,8 @@ public class MessengeCenter {
 			logger.info("USAGE: -predict <model> <colleges> <student> <k> <preference>");
 	}
 
-	void enhance(String request, Jedis redis) {
-		String[] args = request.split(" ");
-		if (args.length == 6) {
+	void enhance(String[] args, Jedis redis) {
+		if (args.length >= 6) {
 			double[][] w = DataUtil.getRedisData(redis, args[1], false);
 			double[][] colleges = DataUtil.getRedisData(redis, args[2], true);
 			double[][] students = DataUtil.getRedisData(redis, args[3], true);
@@ -74,28 +73,7 @@ public class MessengeCenter {
 			w = cm.enhance(w, colleges, students, preferences);
 			DataUtil.setRedisData(redis, args[5], w, false);
 		} else
-			logger.info("USAGE: -enhance <model> <colleges> <students> <preferences> <enhance>");
-	}
-
-	void simulate(String request, Jedis redis) {
-		String[] args = request.split(" ");
-		if (args.length == 4) {
-			int ns = 100, ds = 25;
-			int nc = 200, dc = 23;
-			int maxK = 10;
-
-			double[][] students = DataUtil.generateFeatureMatrix(ns, ds, -1, 1);
-			double[][] colleges = DataUtil.generateFeatureMatrix(nc, dc, 0, 1);
-
-			List<int[]> preferences = DataUtil.generatePreferences(students, colleges, maxK);
-
-			double[][] w = cm.learn(colleges, students, preferences);
-			DataUtil.setRedisData(redis, args[0], colleges, true);
-			DataUtil.setRedisData(redis, args[1], students, true);
-			DataUtil.setRedisData(redis, args[2], preferences);
-			DataUtil.setRedisData(redis, args[3], w, true);
-		} else
-			logger.info("USAGE: -simulate <colleges> <students> <preferences> <model>");
+			logger.info("USAGE: -enhance <model> <colleges> <students> <preferences> <model_enhanced>");
 	}
 
 	class QueryConsumer extends DefaultConsumer {
@@ -109,16 +87,15 @@ public class MessengeCenter {
 		public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
 				throws IOException {
 			String request = new String(body, "UTF8");
-
+			String[] args = request.split(" ");
+			String prefix = args[0];
 			try (Jedis redis = pool.getResource()) {
-				if (request.startsWith("-train"))
-					train(request, redis);
-				else if (request.startsWith("-predict"))
-					predict(request, redis);
-				else if (request.startsWith("-enhance"))
-					enhance(request, redis);
-				else if (request.startsWith("-simulate"))
-					simulate(request, redis);
+				if (prefix.startsWith("-train"))
+					train(args, redis);
+				else if (prefix.startsWith("-predict"))
+					predict(args, redis);
+				else if (prefix.startsWith("-enhance"))
+					enhance(args, redis);
 			}
 			loggerQuery.info("Received " + request);
 		}
@@ -162,18 +139,32 @@ public class MessengeCenter {
 	}
 
 	public static void main(String[] args) {
-		MessengeCenter mc = new MessengeCenter();
-		if (args == null || !args[0].equals("-run")) {
-			System.err.println("USAGE: -run <redis_host> <rabbitmq_host>");
+		if (args == null) {
+			System.err.println("USAGE:\n -train <colleges> <students> <preferences> <model> <redis_host>");
+			System.err.println(" -predict <model> <colleges> <student> <k> <preference> <redis_host>");
+			System.err.println(" -enhance <model> <colleges> <students> <preferences> <model_enhanced> <redis_host>");
 			return;
 		}
+		int m = args.length;
+		String hostRedis = "";
+		if (m > 1)
+			hostRedis = args[m - 1];
 
-		int len = args.length;
-		if (len == 1)
-			mc.run(null, null);
-		if (len == 2)
-			mc.run(args[1], null);
-		else if (len == 3)
-			mc.run(args[1], args[2]);
+		MessengeCenter mc = new MessengeCenter();
+		JedisPool pool = new JedisPool(new JedisPoolConfig(), hostRedis, mc.portRedis);
+
+		String prefix = args[0];
+		try (Jedis redis = pool.getResource()) {
+			if (prefix.startsWith("-train"))
+				mc.train(args, redis);
+			else if (prefix.startsWith("-predict"))
+				mc.predict(args, redis);
+			else if (prefix.startsWith("-enhance"))
+				mc.enhance(args, redis);
+		}
+
+		if (!pool.isClosed())
+			pool.close();
+		pool.destroy();
 	}
 }

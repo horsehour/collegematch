@@ -49,9 +49,9 @@ public class MessengeCenter {
 	void predict(String[] args, Jedis redis) {
 		if (args.length >= 6) {
 			double[][] w = DataUtil.getRedisData(redis, args[1], false);
-			double[][] colleges = DataUtil.getRedisData(redis, args[2], false);
+			double[][] colleges = DataUtil.getRedisData(redis, args[2], true);
 			double[] student = new double[w.length];
-			DataUtil.getRedisData(redis, args[3], false, student);
+			DataUtil.getRedisData(redis, args[3], true, student);
 			int k = Integer.parseInt(args[4]);
 			int[] preference = null;
 			if (k <= 0)
